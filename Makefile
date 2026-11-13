@@ -37,7 +37,10 @@ run: $(ELF)
 	qemu-system-aarch64 -M virt,gic-version=2 -cpu cortex-a57 -m 128M \
 		-nographic -kernel $(ELF)
 
+test: $(ELF)
+	python3 tools/smoke-test.py
+
 clean:
 	rm -rf build
 
-.PHONY: all run clean
+.PHONY: all run test clean
