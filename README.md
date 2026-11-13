@@ -264,9 +264,76 @@ This is a toy kernel, not a production operating system:
   graphical desktop.
 - `mem`, `peek` and `poke` trust the caller completely.
 
-Natural next steps are identity-mapped paging, a timer-driven scheduler, a
-framebuffer or virtio console, and a UEFI port that exits boot services and
-drives hardware directly.
+## Roadmap
+
+Nothing below is implemented yet. This is the intended order of work, not a
+release plan; later milestones depend on the earlier ones.
+
+### Milestone 1 — leave the firmware behind (UEFI)
+
+The current UEFI build is an EFI application: it calls `ConOut`, `ConIn`,
+`Stall`, `GetTime` and `ResetSystem`, and lets the firmware own the machine.
+The first real-kernel milestone is to change that:
+
+- [ ] Call `ExitBootServices` with the final memory map key.
+- [ ] Stop using Boot Services console, input, allocation and `Stall` calls.
+- [ ] Build the kernel's own page tables and switch to an identity-mapped
+      address space.
+- [ ] Discover hardware from ACPI (`MADT`, `GTDT`, `SPCR`) or the device tree.
+- [ ] Install the kernel's own exception vectors, GIC driver and generic timer.
+- [ ] Bring up a native console: PL011, 16550, or a GOP/ramfb framebuffer.
+- [ ] Keep only the runtime services that remain valid, such as `GetTime`,
+      `ResetSystem` and UEFI variables; map them with `SetVirtualAddressMap`
+      once the MMU is active.
+
+**Why this order:** after `ExitBootServices` the firmware console, keyboard,
+boot-time timer and memory allocator are gone. The kernel needs its own
+interrupt controller, clock, console and page allocator before it can run the
+shell again. Hardware discovery comes first so these drivers are not
+hard-coded to one board.
+
+This milestone also needs a GICv3 path, since many modern ARM64 machines do
+not expose a GICv2 CPU interface.
+
+### Milestone 2 — memory and scheduling (shared)
+
+- [ ] MMU and caches on, with RAM and device mappings.
+- [ ] Move to a higher-half kernel layout.
+- [ ] Physical page allocator, kernel heap and guard pages.
+- [ ] Timer-driven preemptive round-robin scheduler.
+- [ ] Kernel threads with `yield`, `sleep` and `exit`.
+- [ ] SMP bring-up using PSCI `CPU_ON`.
+- [ ] Idle loop and per-CPU data.
+
+### Milestone 3 — user mode and system calls
+
+- [ ] Separate user and kernel page tables, with UXN/PXN enforced.
+- [ ] EL0 tasks and an `svc` exception entry path.
+- [ ] A minimal syscall table: `read`, `write`, `exit`, `yield`, `mmap`,
+      `clone`.
+- [ ] A small user-space shell or utility built as an ELF.
+
+### Milestone 4 — devices and filesystems
+
+- [ ] Virtio-mmio/PCI transport.
+- [ ] Virtio-console or a persistent UART console.
+- [ ] Virtio-blk and a read-only filesystem.
+- [ ] Framebuffer console with a built-in 8×8 font.
+- [ ] A boot image and an init process.
+
+### Milestone 5 — real-hardware hardening
+
+- [ ] Boot on at least two different AArch64 UEFI machines or boards.
+- [ ] Support both ACPI and device-tree boot paths.
+- [ ] SMP validation on physical hardware.
+- [ ] Secure Boot signing instructions.
+- [ ] A QEMU matrix covering GICv2, GICv3 and multiple firmware builds.
+- [ ] Panic screens and persistent serial logs.
+
+### Non-goals for now
+
+POSIX compatibility, networking, a graphical desktop, and production security
+are deliberately out of scope until the core kernel owns the machine.
 
 ## License
 
