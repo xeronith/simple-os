@@ -122,7 +122,10 @@ run-efi-headless: $(UEFI_IMAGE)
 test: $(ELF)
 	python3 tools/smoke-test.py
 
+test-efi: $(UEFI_IMAGE)
+	EDK2_CODE=$(EDK2_CODE) EDK2_VARS=$(EDK2_VARS) python3 tools/smoke-test-efi.py
+
 clean:
 	rm -rf build
 
-.PHONY: all run run-headless efi run-efi run-efi-headless test clean
+.PHONY: all run run-headless efi run-efi run-efi-headless test test-efi clean
