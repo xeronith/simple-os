@@ -6,5 +6,6 @@ extern volatile unsigned long timer_ticks;
 void timer_init(void);
 void timer_wait_ms(unsigned ms);
 unsigned long timer_frequency(void);
+unsigned long timer_ticks_now(void);
 
 #endif

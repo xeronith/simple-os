@@ -5,6 +5,7 @@
 #include "kernel.h"
 #include "heap.h"
 #include "lib.h"
+#include "platform.h"
 #include "shell.h"
 #include "timer.h"
 #include "uart.h"
@@ -119,4 +120,30 @@ void kmain(void)
     uart_printf("\n  ready. type 'help' for a list of commands.\n\n");
 
     shell_run();
+}
+
+const char *platform_machine_name(void)
+{
+    return "QEMU virt (AArch64)";
+}
+
+void platform_reboot(void)
+{
+    register unsigned long function __asm__("x0") = 0x84000009UL;
+    __asm__ volatile("hvc #0" : "+r"(function) : : "memory");
+}
+
+void platform_panic(void)
+{
+    __asm__ volatile("brk #0x42");
+    for (;;) {
+        __asm__ volatile("wfi");
+    }
+}
+
+void platform_halt(void)
+{
+    for (;;) {
+        __asm__ volatile("wfi");
+    }
 }

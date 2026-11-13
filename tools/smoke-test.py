@@ -29,7 +29,7 @@ CMD = [
 
 TESTS = [
     ("help", ["commands:", "uptime", "panic"]),
-    ("info", ["CurrentEL", "EL1", "counter", "vectors"]),
+    ("info", ["CurrentEL", "EL1", "timer", "vectors"]),
     ("uptime", ["uptime", "ticks"]),
     ("heap", ["heap", "bytes used"]),
     ("alloc 64", ["allocated 64 bytes"]),

@@ -5,6 +5,7 @@
 #include "shell.h"
 #include "heap.h"
 #include "lib.h"
+#include "platform.h"
 #include "timer.h"
 #include "uart.h"
 
@@ -183,11 +184,11 @@ static void command_help(void)
               "    peek <addr>         read a 64-bit word\n"
               "    poke <addr> <val>   write a 64-bit word\n"
               "    echo <text>         print text\n"
-              "    sleep <ms>          sleep using the timer interrupt\n"
+              "    sleep <ms>          sleep using the platform timer\n"
               "    clear               clear the screen\n"
-              "    panic               raise a BRK exception (demo)\n"
-              "    reboot              PSCI system reset\n"
-              "    halt                stop the cpu\n");
+              "    panic               trigger a kernel panic (demo)\n"
+              "    reboot              reset the machine\n"
+              "    halt                stop the CPU\n");
 }
 
 static void command_info(void)
@@ -199,12 +200,12 @@ static void command_info(void)
     __asm__ volatile("mrs %0, CurrentEL" : "=r"(currentel));
     frequency = timer_frequency();
 
-    uart_printf("  machine     QEMU virt, AArch64\n");
+    uart_printf("  machine     %s\n", platform_machine_name());
     uart_printf("  MIDR_EL1    0x%016lx  implementer 0x%02lx  part 0x%03lx  revision %lu\n",
                 midr, (midr >> 24) & 0xFF, (midr >> 4) & 0xFFF, midr & 0xF);
     uart_printf("  MPIDR_EL1   0x%016lx\n", mpidr);
     uart_printf("  CurrentEL   EL%lu\n", (currentel >> 2) & 3);
-    uart_printf("  counter     %lu Hz, scheduler tick %lu Hz\n", frequency, TIMER_HZ);
+    uart_printf("  timer       %lu Hz, scheduler tick %lu Hz\n", frequency, TIMER_HZ);
     uart_printf("  kernel      0x%016lx - 0x%016lx\n",
                 (unsigned long)__image_start, (unsigned long)__kernel_end);
     uart_printf("  bss         0x%016lx - 0x%016lx\n",
@@ -215,7 +216,7 @@ static void command_info(void)
 
 static void command_uptime(void)
 {
-    unsigned long ticks = timer_ticks;
+    unsigned long ticks = timer_ticks_now();
     unsigned long milliseconds = ticks * (1000UL / TIMER_HZ);
     unsigned long seconds = milliseconds / 1000UL;
     unsigned long centiseconds = (milliseconds % 1000UL) / 10UL;
@@ -322,30 +323,23 @@ static void command_sleep(char *args)
 
 static void command_panic(void)
 {
-    uart_puts("  executing brk #0x42...\n");
-    __asm__ volatile("brk #0x42");
-    uart_puts("  brk returned unexpectedly\n");
+    uart_puts("  triggering a kernel panic...\n");
+    platform_panic();
 }
 
 static void command_reboot(void)
 {
-    uart_puts("  requesting PSCI SYSTEM_RESET...\n");
+    uart_puts("  requesting system reset...\n");
+    platform_reboot();
 
-    register unsigned long function __asm__("x0") = 0x84000009UL;
-    __asm__ volatile("hvc #0" : "+r"(function) : : "memory");
-
-    uart_puts("  reset returned; PSCI is unavailable. halting.\n");
-    for (;;) {
-        __asm__ volatile("wfi");
-    }
+    uart_puts("  reset returned; halting.\n");
+    platform_halt();
 }
 
 static void command_halt(void)
 {
-    uart_puts("  halted. press Ctrl-A X in QEMU to quit.\n");
-    for (;;) {
-        __asm__ volatile("wfi");
-    }
+    uart_puts("  halted.\n");
+    platform_halt();
 }
 
 static void execute(char *text)

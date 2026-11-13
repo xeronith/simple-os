@@ -108,3 +108,8 @@ unsigned long timer_frequency(void)
 {
     return read_cntfrq();
 }
+
+unsigned long timer_ticks_now(void)
+{
+    return timer_ticks;
+}
