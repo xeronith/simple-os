@@ -19,6 +19,16 @@ OBJS := build/boot.o build/exc.o build/lib.o build/uart.o \
 
 ELF := build/kernel.elf
 
+# `make run` opens a native QEMU window with the serial console. On macOS the
+# backend is cocoa; elsewhere QEMU's default display backend is used. Override
+# with `make run QEMU_DISPLAY=gtk` (or sdl) when needed.
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+QEMU_DISPLAY ?= cocoa
+else
+QEMU_DISPLAY ?= default
+endif
+
 all: $(ELF)
 
 build/%.o: src/%.c
@@ -35,6 +45,11 @@ $(ELF): $(OBJS) tools/elflink.py
 
 run: $(ELF)
 	qemu-system-aarch64 -M virt,gic-version=2 -cpu cortex-a57 -m 128M \
+		-display $(QEMU_DISPLAY) -serial vc -monitor none \
+		-name "simple-os" -kernel $(ELF)
+
+run-headless: $(ELF)
+	qemu-system-aarch64 -M virt,gic-version=2 -cpu cortex-a57 -m 128M \
 		-nographic -kernel $(ELF)
 
 test: $(ELF)
@@ -43,4 +58,4 @@ test: $(ELF)
 clean:
 	rm -rf build
 
-.PHONY: all run test clean
+.PHONY: all run run-headless test clean

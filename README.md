@@ -29,8 +29,9 @@ simple-os> info
 
 ## Features
 
-- **Boots directly from an ELF.** QEMU's `virt` machine loads the kernel with
-  `-kernel`; there is no boot sector, multiboot header, or GRUB stage.
+- **Boots directly from an ELF under QEMU.** The `virt` machine loads the
+  kernel with `-kernel`; there is no boot sector, multiboot header, or GRUB
+  stage in the QEMU flow.
 - **Real exception handling.** A 2 KiB-aligned vector table covers all 16
   architectural entries. Synchronous faults print ESR, EC, ISS, FAR, ELR and
   SPSR with decoded fault classes before halting.
@@ -38,6 +39,8 @@ simple-os> info
   tick. `sleep` is driven by the timer interrupt.
 - **Serial console.** PL011 UART driver at `0x09000000`, with a compact
   `printf` supporting `%s %c %d %u %x %X %p %b`, width and zero padding.
+- **Native QEMU window.** `make run` opens the serial console in a dedicated
+  QEMU window. `make run-headless` keeps the terminal workflow for SSH and CI.
 - **Memory management, to a point.** A 16 MiB bump allocator sits above the
   kernel; `alloc` and `heap` expose it from the shell.
 - **Interactive monitor.** Line editing, backspace, Ctrl-C, Ctrl-L, memory
@@ -54,6 +57,11 @@ simple-os> info
 | `python3` | Runs the linker and the smoke test |
 | `make` | Build orchestration |
 | `qemu-system-aarch64` | Emulates the `virt` machine |
+
+`make run` additionally needs a graphical QEMU display backend. On macOS QEMU
+uses `cocoa`; on Linux and Windows it selects its default backend. Use
+`make run-headless` on SSH or other display-less hosts, or override the
+backend with `make run QEMU_DISPLAY=gtk` (or `sdl`).
 
 Upstream clang builds and the Xcode Command Line Tools both support the
 required target. A GNU cross-compiler is not needed.
@@ -89,7 +97,17 @@ make run
 
 SSH users can clone `git@github.com:xeronith/simple-os.git` instead.
 
-`make run` starts QEMU in `-nographic` mode. Press **Ctrl-A X** to quit.
+`make run` opens a native QEMU window with the serial console as a virtual
+terminal. Click the window and type as usual; close the window to quit. The
+window currently shows the serial console, not a graphical framebuffer.
+
+For a terminal session (SSH, CI, or a host without a display), use:
+
+```sh
+make run-headless
+```
+
+Press **Ctrl-A X** to quit the headless session.
 
 Run the scripted boot test without an interactive terminal:
 
@@ -181,13 +199,40 @@ src/lib.c            memset/memcpy/str* implementations
 src/*.h              public interfaces
 tools/elflink.py     minimal ELF64/AArch64 linker
 tools/smoke-test.py  scripted QEMU boot test
-Makefile             build, run and test targets
+Makefile             build, window, headless and test targets
 ```
+
+## Real hardware
+
+The current kernel targets QEMU's `virt` machine: the PL011 UART, GICv2, RAM
+base and load address are fixed, and QEMU's `-kernel` loader starts the ELF.
+Booting a physical board needs a board port plus the firmware/boot path that
+the board provides.
+
+Practical directions are:
+
+- **UEFI AArch64** — build a PE/COFF EFI application and use the firmware's
+  console and ACPI/DT information. This covers many ARM64 boards and virtual
+  machines.
+- **Raspberry Pi 4** — produce a `kernel8.img` SD-card image and add a board
+  layer for the BCM2711 UART, GIC and memory map.
+- **x86_64 PC** — port the kernel and boot it through Limine, GRUB, or a
+  custom two-stage bootloader. This is the most direct route for a standard
+  desktop, but it is a separate architecture port.
+
+None of these ports is implemented yet. On real hardware some firmware is
+always involved (UEFI, a board boot ROM, or a PC BIOS); "self-contained" here
+means the repository produces the bootable artifact without requiring a
+separate bootloader installation.
 
 ## Limitations
 
 This is a toy kernel, not a production operating system:
 
+- The image targets QEMU's `virt` machine and is not yet bootable on physical
+  hardware.
+- The native window shows the serial console; there is no framebuffer or
+  graphical desktop.
 - The MMU and caches are off; all addresses are physical.
 - One CPU, no SMP.
 - No user mode, no system calls.
