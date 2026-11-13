@@ -15,16 +15,18 @@ CFLAGS   := $(CROSS) -std=c11 -O2 -g -Wall -Wextra \
 ASFLAGS  := $(CROSS) -g -Isrc
 
 OBJS := build/boot.o build/exc.o build/lib.o build/uart.o \
-        build/timer.o build/heap.o build/shell.o build/kernel.o
+        build/timer.o build/heap.o build/matrix.o build/shell.o build/kernel.o
 
 ELF := build/kernel.elf
 
 # `make run` opens a native QEMU window with the serial console. On macOS the
-# backend is cocoa; elsewhere QEMU's default display backend is used. Override
-# with `make run QEMU_DISPLAY=gtk` (or sdl) when needed.
+# cocoa backend starts with zoom-to-fit so the window is readable on Retina
+# displays (and can be resized to scale the text); elsewhere QEMU's default
+# display backend is used. Override with `make run QEMU_DISPLAY=gtk` (or sdl,
+# or a plain `cocoa`) when needed.
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
-QEMU_DISPLAY ?= cocoa
+QEMU_DISPLAY ?= cocoa,zoom-to-fit=on
 EDK2_CODE ?= /opt/homebrew/share/qemu/edk2-aarch64-code.fd
 EDK2_VARS ?= /opt/homebrew/share/qemu/edk2-arm-vars.fd
 else
@@ -45,7 +47,8 @@ UEFI_CFLAGS := $(CROSS) -std=c11 -O2 -g -Wall -Wextra \
                -fshort-wchar -Isrc -Isrc/uefi
 
 UEFI_OBJS := build/uefi/main.o build/uefi/console.o build/uefi/timer.o \
-             build/uefi/heap.o build/uefi/lib.o build/uefi/shell.o
+             build/uefi/heap.o build/uefi/lib.o build/uefi/matrix.o \
+             build/uefi/shell.o
 
 UEFI_IMAGE := build/BOOTAA64.EFI
 
@@ -58,6 +61,10 @@ build/uefi/%.o: src/uefi/%.c
 	$(CC) $(UEFI_CFLAGS) -c $< -o $@
 
 build/uefi/lib.o: src/lib.c
+	@mkdir -p build/uefi
+	$(CC) $(UEFI_CFLAGS) -c $< -o $@
+
+build/uefi/matrix.o: src/matrix.c
 	@mkdir -p build/uefi
 	$(CC) $(UEFI_CFLAGS) -c $< -o $@
 

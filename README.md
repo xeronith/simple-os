@@ -24,6 +24,9 @@ A tiny bare-metal AArch64 toy operating system with two boot paths:
   timer services and reset service, while sharing the same shell.
 - **Interactive monitor.** Line editing, backspace, Ctrl-C, Ctrl-L, memory
   peek/poke, hexdumps, uptime, CPU information and more.
+- **Matrix digital rain.** `matrix` animates falling glyphs in the console with
+  ANSI cursor addressing and green fading trails; it runs until a key is
+  pressed or an optional duration expires.
 - **Native QEMU windows.** `make run` and `make run-efi` open dedicated QEMU
   windows; headless targets are available for SSH and CI.
 - **Toolchain-light build.** Clang emits bare-metal AArch64 objects. The repo
@@ -105,6 +108,11 @@ SSH users can clone `git@github.com:xeronith/simple-os.git` instead.
 terminal. Click the window and type as usual; close the window to quit. The
 window shows the serial console, not a graphical framebuffer.
 
+On macOS the cocoa backend is started with `zoom-to-fit=on`, which keeps the
+window at a readable size on Retina displays and lets you resize it while the
+text scales to fit. If your QEMU predates the option, use
+`make run QEMU_DISPLAY=cocoa`.
+
 These targets need a graphical QEMU backend. Override the backend with
 `QEMU_DISPLAY=gtk` (or `sdl`) if needed.
 
@@ -145,9 +153,14 @@ again on a later run, press **Enter** to select the device. Delete
 | `echo <text>` | Print text |
 | `sleep <ms>` | Sleep using the platform timer |
 | `clear` | Clear the screen |
+| `matrix [seconds]` | Matrix digital rain (any key stops) |
 | `panic` | Trigger a kernel panic |
 | `reboot` | Reset the machine |
 | `halt` | Stop the CPU |
+
+`matrix` fills an 80×24 text screen with falling glyphs. Run it without an
+argument to animate until a key is pressed, or pass a number of seconds for a
+timed run.
 
 `mem`, `peek` and `poke` use physical addresses and are not validated. On the
 QEMU kernel a bad access produces a fault report; the UEFI build has no custom
@@ -180,7 +193,8 @@ the firmware pointers, disables the watchdog, and runs the shared shell on top
 of a small platform layer:
 
 - `src/uefi/console.c` implements the `uart_*` API with the UEFI simple text
-  output/input protocols and translates the shell's ANSI escapes.
+  output/input protocols and translates the shell's ANSI colour, clear-screen
+  and cursor-addressing escapes into firmware calls.
 - `src/uefi/timer.c` uses `BootServices->Stall` and `RuntimeServices->GetTime`.
 - `src/uefi/heap.c` provides a 1 MiB static bump allocator.
 - `src/uefi/main.c` handles reboot/halt and the EFI entry point.
@@ -213,6 +227,7 @@ src/exc.S              vector table, IRQ save/restore, fatal fault path
 src/kernel.c           QEMU banner, fault decoding, kmain
 src/uart.c             PL011 driver and printf
 src/timer.c            GICv2 and generic timer
+src/matrix.c           Matrix digital rain effect
 src/shell.c            shared serial monitor
 src/heap.c             QEMU bump allocator
 src/lib.c              memset/memcpy/str* implementations

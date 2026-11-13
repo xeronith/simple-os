@@ -37,6 +37,7 @@ TESTS = [
     ("peek 41000000", ["= 0x0000000012345678"]),
     ("sleep 200", []),
     ("uptime", ["ticks"]),
+    ("matrix 1", ["matrix  |  press any key to stop", "simple-os>"]),
     ("panic", ["KERNEL EXCEPTION", "BRK instruction", "kernel halted"]),
 ]
 

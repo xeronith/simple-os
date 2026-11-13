@@ -62,6 +62,7 @@ TESTS = [
     ("alloc 64", ["allocated 64 bytes"]),
     ("sleep 200", []),
     ("uptime", ["ticks)"]),
+    ("matrix 1", ["matrix  |  press any key to stop", "simple-os>"]),
     ("panic", ["panic requested; halting."]),
 ]
 

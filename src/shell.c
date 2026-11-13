@@ -5,6 +5,7 @@
 #include "shell.h"
 #include "heap.h"
 #include "lib.h"
+#include "matrix.h"
 #include "platform.h"
 #include "timer.h"
 #include "uart.h"
@@ -186,6 +187,7 @@ static void command_help(void)
               "    echo <text>         print text\n"
               "    sleep <ms>          sleep using the platform timer\n"
               "    clear               clear the screen\n"
+              "    matrix [seconds]    Matrix digital rain (any key stops)\n"
               "    panic               trigger a kernel panic (demo)\n"
               "    reboot              reset the machine\n"
               "    halt                stop the CPU\n");
@@ -321,6 +323,22 @@ static void command_sleep(char *args)
     timer_wait_ms((unsigned)milliseconds);
 }
 
+static void command_matrix(char *args)
+{
+    char *cursor = args;
+    char *seconds_text = next_token(&cursor);
+    unsigned long seconds = 0;
+
+    if (seconds_text && !parse_dec(seconds_text, &seconds)) {
+        uart_puts("  usage: matrix [seconds]\n");
+        return;
+    }
+    if (seconds > 3600) {
+        seconds = 3600;
+    }
+    matrix_run(seconds);
+}
+
 static void command_panic(void)
 {
     uart_puts("  triggering a kernel panic...\n");
@@ -373,6 +391,8 @@ static void execute(char *text)
         command_sleep(cursor);
     } else if (strcmp(command, "clear") == 0) {
         uart_puts("\x1b[2J\x1b[H");
+    } else if (strcmp(command, "matrix") == 0) {
+        command_matrix(cursor);
     } else if (strcmp(command, "panic") == 0) {
         command_panic();
     } else if (strcmp(command, "reboot") == 0) {

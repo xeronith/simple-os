@@ -54,9 +54,10 @@ struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
     void *TestString;
     void *QueryMode;
     void *SetMode;
-    void *SetAttribute;
+    EFI_STATUS (*SetAttribute)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *, UINTN Attribute);
     EFI_STATUS (*ClearScreen)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *);
-    EFI_STATUS (*SetCursorPosition)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *, UINTN, UINTN);
+    EFI_STATUS (*SetCursorPosition)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *,
+                                    UINTN Column, UINTN Row);
     void *EnableCursor;
     void *Mode;
 };
@@ -107,6 +108,8 @@ extern EFI_RUNTIME_SERVICES *gRT;
 _Static_assert(sizeof(EFI_TABLE_HEADER) == 24, "EFI_TABLE_HEADER layout");
 _Static_assert(sizeof(EFI_TIME) == 16, "EFI_TIME layout");
 _Static_assert(offsetof(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL, OutputString) == 8,
+               "EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL layout");
+_Static_assert(offsetof(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL, SetAttribute) == 40,
                "EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL layout");
 _Static_assert(offsetof(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL, ClearScreen) == 48,
                "EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL layout");

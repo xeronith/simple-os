@@ -1,9 +1,10 @@
 /*
  * console.c - UEFI simple text output/input backend for the shared shell.
  *
- * The shell emits a few ANSI escape sequences for color and screen clearing.
- * UEFI's text console does not interpret those, so they are filtered here and
- * translated into ClearScreen / SetCursorPosition calls.
+ * The shell emits ANSI escape sequences for colour, screen clearing and
+ * cursor addressing. UEFI's text console does not interpret those, so they
+ * are parsed here and translated into SetAttribute / ClearScreen /
+ * SetCursorPosition calls.
  */
 
 #include "uefi.h"
@@ -12,7 +13,32 @@
 #include <stdarg.h>
 #include <stdint.h>
 
+#define ANSI_PARAMS 8
+
+/* UEFI text attributes: foreground in the low nibble, background high. */
+#define EFI_BLACK       0x00
+#define EFI_BLUE        0x01
+#define EFI_GREEN       0x02
+#define EFI_CYAN        0x03
+#define EFI_RED         0x04
+#define EFI_MAGENTA     0x05
+#define EFI_BROWN       0x06
+#define EFI_LIGHTGRAY   0x07
+#define EFI_DARKGRAY    0x08
+#define EFI_LIGHTBLUE   0x09
+#define EFI_LIGHTGREEN  0x0A
+#define EFI_LIGHTCYAN   0x0B
+#define EFI_LIGHTRED    0x0C
+#define EFI_LIGHTMAGENTA 0x0D
+#define EFI_YELLOW      0x0E
+#define EFI_WHITE       0x0F
+
 static int ansi_state;
+static int ansi_params[ANSI_PARAMS];
+static int ansi_count;
+static int ansi_value;
+static int ansi_have_digit;
+static int ansi_private;
 
 static void output(const CHAR16 *text)
 {
@@ -36,9 +62,98 @@ static void output_char(char c)
     output(buffer);
 }
 
+static void set_attribute(unsigned int attribute)
+{
+    if (gST && gST->ConOut && gST->ConOut->SetAttribute) {
+        gST->ConOut->SetAttribute(gST->ConOut, (UINTN)attribute);
+    }
+}
+
+static void set_cursor(int row, int column)
+{
+    if (row < 0) {
+        row = 0;
+    }
+    if (column < 0) {
+        column = 0;
+    }
+    if (gST && gST->ConOut && gST->ConOut->SetCursorPosition) {
+        /* UEFI takes (Column, Row); the shell's ANSI coordinates are (row, col). */
+        gST->ConOut->SetCursorPosition(gST->ConOut, (UINTN)column, (UINTN)row);
+    }
+}
+
+static void ansi_begin(void)
+{
+    ansi_count = 0;
+    ansi_value = 0;
+    ansi_have_digit = 0;
+    ansi_private = 0;
+}
+
+static void ansi_push_param(void)
+{
+    if (ansi_count < ANSI_PARAMS) {
+        ansi_params[ansi_count++] = ansi_have_digit ? ansi_value : 0;
+    }
+    ansi_value = 0;
+    ansi_have_digit = 0;
+}
+
+static int ansi_param(int index, int fallback)
+{
+    if (index >= ansi_count || ansi_params[index] <= 0) {
+        return fallback;
+    }
+    return ansi_params[index];
+}
+
+static void ansi_select_graphic_rendition(void)
+{
+    /* ANSI colour index -> UEFI attribute, with a black background. */
+    static const unsigned char palette[16] = {
+        EFI_BLACK,    EFI_RED,     EFI_GREEN,     EFI_BROWN,
+        EFI_BLUE,     EFI_MAGENTA, EFI_CYAN,      EFI_LIGHTGRAY,
+        EFI_DARKGRAY, EFI_LIGHTRED, EFI_LIGHTGREEN, EFI_YELLOW,
+        EFI_LIGHTBLUE, EFI_LIGHTMAGENTA, EFI_LIGHTCYAN, EFI_WHITE,
+    };
+    int foreground = 7;
+    int bold = 0;
+
+    if (ansi_count == 0) {
+        ansi_push_param(); /* ESC[m means reset */
+    }
+
+    for (int i = 0; i < ansi_count; i++) {
+        int code = ansi_params[i];
+
+        if (code == 0) {
+            foreground = 7;
+            bold = 0;
+        } else if (code == 1) {
+            bold = 1;
+        } else if (code == 22) {
+            bold = 0;
+        } else if (code >= 30 && code <= 37) {
+            foreground = code - 30;
+        } else if (code == 39) {
+            foreground = 7;
+        } else if (code >= 90 && code <= 97) {
+            foreground = code - 90 + 8;
+        }
+    }
+
+    if (bold && foreground < 8) {
+        foreground += 8;
+    }
+    set_attribute(palette[foreground & 15]);
+}
+
 void uart_init(void)
 {
     ansi_state = 0;
+    ansi_begin();
+    set_attribute(EFI_LIGHTGRAY | (EFI_BLACK << 4));
 }
 
 void uart_putc(char c)
@@ -54,17 +169,39 @@ void uart_putc(char c)
 
     if (ansi_state == 1) {
         ansi_state = (c == '[') ? 2 : 0;
+        if (ansi_state == 2) {
+            ansi_begin();
+        }
         return;
     }
 
-    /* CSI sequence: ignore parameters, act on the final byte. */
-    if ((c >= '0' && c <= '9') || c == ';') {
+    /* CSI sequence: collect decimal parameters, then act on the final byte. */
+    if (c >= '0' && c <= '9') {
+        ansi_value = ansi_value * 10 + (c - '0');
+        ansi_have_digit = 1;
         return;
     }
-    if (c == 'J' && gST && gST->ConOut && gST->ConOut->ClearScreen) {
-        gST->ConOut->ClearScreen(gST->ConOut);
-    } else if (c == 'H' && gST && gST->ConOut && gST->ConOut->SetCursorPosition) {
-        gST->ConOut->SetCursorPosition(gST->ConOut, 0, 0);
+    if (c == ';') {
+        ansi_push_param();
+        return;
+    }
+    if (c == '?' || c == '>' || c == '<' || c == '=') {
+        ansi_private = 1;
+        return;
+    }
+    if (c < 0x40 || c > 0x7e) {
+        return;
+    }
+
+    ansi_push_param();
+    if (!ansi_private) {
+        if (c == 'J' && gST && gST->ConOut && gST->ConOut->ClearScreen) {
+            gST->ConOut->ClearScreen(gST->ConOut);
+        } else if ((c == 'H' || c == 'f')) {
+            set_cursor(ansi_param(0, 1) - 1, ansi_param(1, 1) - 1);
+        } else if (c == 'm') {
+            ansi_select_graphic_rendition();
+        }
     }
     ansi_state = 0;
 }
